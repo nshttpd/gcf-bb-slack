@@ -3,3 +3,4 @@ include/**
 bin/**
 .Python
 .idea/**
+.gcloudignore

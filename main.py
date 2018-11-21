@@ -18,7 +18,8 @@ from urllib import request, parse
 def validate_request(body, signature):
     sekret = os.environ.get('BITBUCKET_SECRET', None)
     if sekret is not None:
-        calc_sig = base64.b64encode(hmac.new(sekret, body, digestmod=hashlib.sha256).digest())
+        s = bytearray().extend(map(ord, sekret))
+        calc_sig = base64.b64encode(hmac.new(s, body, digestmod=hashlib.sha256).digest())
         if calc_sig == signature:
             return True
     return False
@@ -28,7 +29,7 @@ def send_slack_msg(msg):
     webhook = os.environ.get('SLACK_WEBHOOK', None)
     if webhook is not None:
         headers = {'Content-type': 'application/json'}
-        data = {'text': msg}
+        data = {'text': msg, 'icon_emoji': ':bitbucket:'}
         payload = parse.urlencode(data).encode()
         req = request.Request(webhook, data=payload, headers=headers)
         resp = request.urlopen(req)
@@ -53,7 +54,9 @@ def get_event_string(event):
 
 def slack_template(event, d):
     templates = {
-        'pullrequest:created': lambda d : '%s (%d) : %s by %s in %s branch %s' % (d['event_str'], d['pr_id'], d['pr_desc'], d['nick'], d['repo_name'], d['pr_branch'])
+        'pullrequest:created': lambda d : '%s (%d) : %s by %s in %s branch %s' % (d['event_str'], d['pr_id'], d['pr_desc'], d['nick'], d['repo_name'], d['pr_branch']),
+        'pullrequest:approved': lambda d : '%s (%d) : %s (%s | %s) by %s' % (d['event_str'], d['pr_id'], d['pr_desc'], d['pr_branch'], d['repo_nane'], d['approver']),
+        'pullrequest:comment_created': lambda d: '%s (%d) : %s - %s' % (d['event_str'], d['pr_id'], d['nick'], d['comment_text'])
     }
 
     x = templates.get(event, None)
@@ -64,10 +67,16 @@ def slack_template(event, d):
 
 
 def bb_webhook(request):
+    event_key = request.headers['x-event-key']
+
+    # ping to validate webhook.
+    if event_key == 'diagnostics:ping':
+        return 'PONG'
+
     if validate_request(request.data, request.headers['X-Hub-Signature']):
         if request.method == 'POST':
             if request.headers['content-type'] == 'application/json':
-                slack_data = {'event_str': get_event_string(request.headers['X-Event-Key'])}
+                slack_data = {'event_str': get_event_string(event_key)}
                 req_json = request.get_json()
                 if 'actor' in req_json:
                     slack_data['nick'] = req_json['actor']['nickname']
@@ -82,7 +91,7 @@ def bb_webhook(request):
                 if 'approval' in req_json:
                     slack_data['approver'] = req_json['approval']['user']['nickname']
 
-                slack_msg = slack_template(request.headers['X-Event-Key'], slack_data)
+                slack_msg = slack_template(event_key, slack_data)
 
                 if slack_msg is not None:
                     send_slack_msg(slack_msg)

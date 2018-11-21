@@ -5,7 +5,6 @@
 from flask import abort
 import hashlib
 import hmac
-import base64
 import os
 from urllib import request, parse
 
@@ -18,8 +17,10 @@ from urllib import request, parse
 def validate_request(body, signature):
     sekret = os.environ.get('BITBUCKET_SECRET', None)
     if sekret is not None:
-        s = bytearray().extend(map(ord, sekret))
-        calc_sig = base64.b64encode(hmac.new(s, body, digestmod=hashlib.sha256).digest())
+        s = bytes(sekret, 'utf-8')
+        b = bytes(body, 'utf-8')
+        h = hmac.new(s, b, digestmod=hashlib.sha256).hexdigest()
+        calc_sig = "sha256=%s" % h
         if calc_sig == signature:
             return True
     return False

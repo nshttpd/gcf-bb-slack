@@ -95,7 +95,7 @@ def bb_webhook(req):
 
     if validate_request(raw_req, req.headers['X-Hub-Signature']):
         if req.method == 'POST':
-            if req.headers['content-type'] == 'application/json':
+            if req.headers['content-type'] == 'application/json; charset=utf-8':
                 req_json = json.loads(raw_req)
                 attachment = get_attachment_base(event_key)
                 if attachment is not None:
